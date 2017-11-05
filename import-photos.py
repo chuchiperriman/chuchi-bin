@@ -3,7 +3,9 @@
 
 import os
 import sys
+import time
 import pdb
+import datetime
 from shutil import copyfile
 from PIL import Image
 from PIL.ExifTags import TAGS
@@ -33,7 +35,7 @@ class Processor:
                 self.datetime = self._get_datetime_from_filename(self.file)
                 self.write_exif_date = True
 
-        elif ext in ['.mts', '.mp4']:
+        elif ext in ['.mts', '.mp4', '.3gp']:
             self.type = 'mts'
             et_output = os.popen("exiftool \"%s\"" % self.file.encode('utf-8')).read()
             for l in et_output.split('\n'):
@@ -41,6 +43,7 @@ class Processor:
                     self.datetime = l.split(':', 1)[1].strip()
             if not self.datetime:
                 self.datetime = self._get_datetime_from_filename(self.file)
+                self.write_exif_date = True
         else:
             raise Exception("No se pudo determinar el tipo de fichero para %s" % self.file.encode('utf-8'))
 
@@ -62,12 +65,14 @@ class Processor:
         self._copy_file_for_import()
         if self.write_exif_date:
             self._write_exif(self.imported_file)
+        self._touch(self.imported_file)
         if self.type == 'jpg':
             self._copy_image_for_upload()
         elif self.type == 'mts':
             self._copy_file_for_upload()
         else:
             raise Exception("Tipo de fichero desconocido para subir: %s" % self.type)
+        self._touch(self.upload_file)
 
     def _get_datetime_from_filename(self, file):
         filename = os.path.basename(self.file).lower()
@@ -121,6 +126,7 @@ class Processor:
         res = os.system(command.encode('utf-8'))
         if res != 0:
             raise Exception("Error al convertir imágen para subir: %s" % dest_file)
+        self.upload_file = dest_file
 
     def _copy_file_for_upload(self):
         dest_file = os.path.join(SUBIR_FOLDER.decode('utf-8'), os.path.basename(self.imported_file))
@@ -128,6 +134,7 @@ class Processor:
         if not os.path.isdir(dest_dir):
             os.makedirs(dest_dir)
         copyfile(self.imported_file, dest_file)
+        self.upload_file = dest_file
 
     def _write_exif(self, f):
         datetime = "%s:%s:%s 12:00:00" % (self.datetime[0:4], self.datetime[4:6], self.datetime[6:8])
@@ -137,7 +144,15 @@ class Processor:
         res = os.system(command.encode('utf-8'))
         if res != 0:
             raise Exception("Error al escribir la fecha exif: %s" % f)
-        print "Convertido %s" % f
+
+    def _touch(self, f):
+        # Hay que hacer un touch porque google photos coge la fecha de modificación
+        command = "touch %s -t '%s'" % (
+            f,
+            self.datetime.replace('_','')[0:-2]) # No hay que poner los segundos
+        res = os.system(command.encode('utf-8'))
+        if res != 0:
+            raise Exception("Error al escribir la fecha touch: %s" % f)
 
 os.chdir(PRE_FOLDER)
 
