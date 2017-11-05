@@ -21,17 +21,30 @@ class Processor:
     def __init__(self, f):
         self.file = f
         self.datetime = None
+        self.write_exif_date = False
         filename, ext = os.path.splitext(self.file)
         ext = ext.lower()
         if ext in ['.jpg', '.jpeg']:
             self.type = 'jpg'
-            self.datetime = self._get_exif(self.file)["DateTimeOriginal"]
-        elif ext == '.mts':
+            exif = self._get_exif(self.file)
+            if "DateTimeOriginal" in exif:
+                self.datetime = exif["DateTimeOriginal"]
+            else:
+                self.datetime = self._get_datetime_from_filename(self.file)
+                self.write_exif_date = True
+
+        elif ext in ['.mts', '.mp4']:
             self.type = 'mts'
             et_output = os.popen("exiftool \"%s\"" % self.file.encode('utf-8')).read()
             for l in et_output.split('\n'):
                 if 'Date/Time Original' in l:
                     self.datetime = l.split(':', 1)[1].strip()
+            if not self.datetime:
+                self.datetime = self._get_datetime_from_filename(self.file)
+        else:
+            raise Exception("No se pudo determinar el tipo de fichero para %s" % self.file.encode('utf-8'))
+
+
         if not self.datetime:
             raise Exception("No se pudo determinar la fecha o tipo de fichero para %s" % self.file.encode('utf-8'))
 
@@ -47,6 +60,8 @@ class Processor:
     def process(self):
         print(self.file)
         self._copy_file_for_import()
+        if self.write_exif_date:
+            self._write_exif(self.imported_file)
         if self.type == 'jpg':
             self._copy_image_for_upload()
         elif self.type == 'mts':
@@ -54,13 +69,22 @@ class Processor:
         else:
             raise Exception("Tipo de fichero desconocido para subir: %s" % self.type)
 
+    def _get_datetime_from_filename(self, file):
+        filename = os.path.basename(self.file).lower()
+        # WhatsApp usa el formato IMG-20160715-WA0008.jpg o VID-20160710-WA0015.mp4
+        chunks = filename.split('-')
+        if len(chunks) != 3:
+            raise Exception('No se entiende el formato del nombre de fichero %s' % filename)
+        return "%s_120000" % filename.split('-')[1]
+
     def _get_exif(self, fn):
         ret = {}
         i = Image.open(fn)
         info = i._getexif()
-        for tag, value in info.items():
-            decoded = TAGS.get(tag, tag)
-            ret[decoded] = value
+        if info:
+            for tag, value in info.items():
+                decoded = TAGS.get(tag, tag)
+                ret[decoded] = value
         return ret
 
     def _copy_file_for_import(self):
@@ -68,7 +92,8 @@ class Processor:
         month = self.datetime[4:6]
 
         number = 0
-        new_name = "%s-%s" % (self.date, os.path.basename(self.file).lower())
+        # Si el nombre original ya contiene la fecha, la quitamos
+        new_name = "%s-%s" % (self.date, os.path.basename(self.file).replace("%s-" % self.date, '').lower())
 
         dest_file = os.path.join(IMPORTAR_FOLDER.decode('utf-8'), str(self.year), month, new_name)
         original_filename, file_extension = os.path.splitext(new_name)
@@ -91,7 +116,7 @@ class Processor:
         if not os.path.isdir(dest_dir):
             os.makedirs(dest_dir)
         command = "convert %s -resize '3840x2160' '%s'" % (
-            self.file,
+            self.imported_file,
             dest_file)
         res = os.system(command.encode('utf-8'))
         if res != 0:
@@ -103,6 +128,16 @@ class Processor:
         if not os.path.isdir(dest_dir):
             os.makedirs(dest_dir)
         copyfile(self.imported_file, dest_file)
+
+    def _write_exif(self, f):
+        datetime = "%s:%s:%s 12:00:00" % (self.datetime[0:4], self.datetime[4:6], self.datetime[6:8])
+        command = "exiftool -overwrite_original '-DateTimeOriginal=%s' '%s'" % (
+            datetime,
+            f)
+        res = os.system(command.encode('utf-8'))
+        if res != 0:
+            raise Exception("Error al escribir la fecha exif: %s" % f)
+        print "Convertido %s" % f
 
 os.chdir(PRE_FOLDER)
 
