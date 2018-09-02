@@ -35,7 +35,7 @@ class Processor:
                 self.datetime = self._get_datetime_from_filename(self.file)
                 self.write_exif_date = True
 
-        elif ext in ['.mts', '.mp4', '.3gp']:
+        elif ext in ['.mts', '.mp4', '.3gp', '.avi', '.mov']:
             self.type = 'mts'
             et_output = os.popen("exiftool \"%s\"" % self.file.encode('utf-8')).read()
             for l in et_output.split('\n'):
@@ -58,7 +58,7 @@ class Processor:
         self.date = self.datetime.split('_', 1)[0]
         self.year = int(self.datetime[0:4])
         if self.year < 1990 or self.year > 2020:
-            raise Exception("Año incorecto %d" % self.year)
+            raise Exception("Año incorrecto %d de %s" % (self.year, self.file.encode('utf-8')))
 
     def process(self):
         print(self.file)
