@@ -120,12 +120,7 @@ class Processor:
         dest_dir = os.path.dirname(dest_file)
         if not os.path.isdir(dest_dir):
             os.makedirs(dest_dir)
-        command = "convert %s -resize '3840x2160' '%s'" % (
-            self.imported_file,
-            dest_file)
-        res = os.system(command.encode('utf-8'))
-        if res != 0:
-            raise Exception("Error al convertir imágen para subir: %s" % dest_file)
+        self._resize(self.imported_file, dest_file)
         self.upload_file = dest_file
 
     def _copy_file_for_upload(self):
@@ -144,6 +139,16 @@ class Processor:
         res = os.system(command.encode('utf-8'))
         if res != 0:
             raise Exception("Error al escribir la fecha exif: %s" % f)
+    def _resize(self, source_path, dest_path):
+        # command = "convert %s -resize '3840x2160' '%s'" % (
+        #     image_path,
+        #     dest_file)
+        # res = os.system(command.encode('utf-8'))
+        # if res != 0:
+        #     raise Exception("Error al convertir imágen para subir: %s" % dest_file)
+        image = Image.open(source_path)
+        image.thumbnail((3840, 2160))
+        image.save(dest_path, "JPEG")
 
     def _touch(self, f):
         # Hay que hacer un touch porque google photos coge la fecha de modificación
